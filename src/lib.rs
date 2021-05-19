@@ -1,13 +1,15 @@
 #[macro_use]
 extern crate bitflags;
 
-pub mod cvtmode;
+mod cvtmode;
 pub use cvtmode::CvtMode;
 
-use anyhow::Context;
+use anyhow::{anyhow, Context};
+use std::io::{Read, Write};
+use std::io::{Seek, SeekFrom};
 use std::path::Path;
 use std::process::Command;
-use tempfile::tempdir;
+use tempfile::Builder;
 
 pub enum Version {
     V1_0,
@@ -44,21 +46,21 @@ impl std::str::FromStr for Version {
             "1.2" => Ok(Version::V1_2),
             "1.3" => Ok(Version::V1_3),
             "1.4" => Ok(Version::V1_4),
-            _ => None.context("EDID version inavlid.Valid versions range from 1.0 to 1.4"),
+            _ => Err(anyhow!(
+                "EDID version inavlid. Valid versions range from 1.0 to 1.4"
+            )),
         }
     }
 }
 
-fn do_crc(data: &[u8]) -> Vec<u8> {
+fn calculate_crc(data: &[u8]) -> u8 {
     let mut sum: u16 = 0;
-    let mut v = data.to_owned();
 
-    v.iter().for_each(|i| sum += *i as u16);
+    for i in data.iter() {
+        sum += *i as u16;
+    }
 
-    v.pop();
-    v.push((0x100 - sum % 0x100) as u8);
-
-    v
+    (0x100 - sum % 0x100) as u8
 }
 
 pub fn generate_edid(
@@ -66,42 +68,58 @@ pub fn generate_edid(
     version: Version,
     timing_name: &str,
     output: impl AsRef<Path>,
-) -> std::io::Result<()> {
-    let dir = tempdir()?.into_path();
-    let dir = dir.as_path();
+) -> anyhow::Result<()> {
+    let dir = Builder::new()
+        .prefix("edid")
+        .tempdir()
+        .context("Failed to create temporary directory")?;
 
-    let edid_temp_path = dir.join("edid.S.template");
+    let edid_temp_path = dir.path().join("edid.S.template");
     let edid_temp_asm = include_bytes!("edid.S.template");
-    std::fs::write(&edid_temp_path, edid_temp_asm)?;
+    std::fs::write(&edid_temp_path, edid_temp_asm)
+        .with_context(|| format!("Failed to save {}", edid_temp_path.display()))?;
 
-    let edid_path = dir.join("edid.S");
+    let edid_path = dir.path().join("edid.S");
     let edid_asm = mode.generate_edid_asm(version, timing_name);
-    std::fs::write(&edid_path, edid_asm.as_bytes())?;
-
-    let edid_out = dir.join("edid.out");
+    std::fs::write(&edid_path, edid_asm.as_bytes())
+        .with_context(|| format!("Failed to save {}", edid_path.display()))?;
 
     Command::new("cc")
         .arg("-c")
         .arg(&edid_path)
         .arg("-o")
-        .arg(&edid_out)
-        .current_dir(dir)
-        .status()?;
+        .arg(output.as_ref())
+        .status()
+        .with_context(|| format!("Failed to compile {}", edid_path.display()))?;
 
     Command::new("objcopy")
         .arg("-O")
         .arg("binary")
         .arg("-j")
         .arg(".data")
-        .arg(&edid_out)
         .arg(output.as_ref())
-        .status()?;
+        .status()
+        .with_context(|| {
+            format!(
+                "Failed to objcopy {}",
+                output.as_ref().to_path_buf().display()
+            )
+        })?;
 
-    std::fs::remove_dir_all(dir)?;
+    let mut output_file = std::fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .open(output.as_ref())?;
 
-    let data = std::fs::read(output.as_ref())?;
-    let crc_data = do_crc(&data);
-    std::fs::write(output.as_ref(), &crc_data)?;
+    let mut data: Vec<u8> = Vec::new();
+    output_file.read_to_end(&mut data)?;
+
+    let crc = calculate_crc(&data);
+
+    output_file.seek(SeekFrom::End(-1))?;
+    output_file
+        .write(&[crc])
+        .with_context(|| format!("Failed to save {}", output.as_ref().to_path_buf().display()))?;
 
     Ok(())
 }
