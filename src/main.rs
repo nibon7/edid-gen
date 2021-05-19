@@ -1,12 +1,8 @@
+use anyhow::{Context, Result};
 use clap::{App, Arg};
 use edid_gen::{CvtMode, Version};
 
-fn handle_error_and_exit(msg: &str) -> ! {
-    eprintln!("parameter '{}' error", msg);
-    std::process::exit(1);
-}
-
-fn main() -> anyhow::Result<()> {
+fn main() -> Result<()> {
     let matches = App::new("edid-gen")
         .about("Generate EDID file")
         .version("0.1")
@@ -58,37 +54,33 @@ fn main() -> anyhow::Result<()> {
         )
         .get_matches();
 
-    let timing_name = match matches.value_of("timing_name") {
-        Some(s) => s,
-        _ => handle_error_and_exit("timing_name"),
-    };
+    let timing_name = matches
+        .value_of("timing_name")
+        .context("timing_name invalid")?;
 
-    let output = match matches.value_of("output") {
-        Some(s) => s,
-        _ => handle_error_and_exit("output"),
-    };
+    let output = matches.value_of("output").context("output invalid")?;
 
-    let version = match matches.value_of("edid_version") {
-        Some(s) => Version::from(s),
-        _ => handle_error_and_exit("edid_version"),
-    };
+    let version = matches
+        .value_of("edid_version")
+        .context("edid version invalid")
+        .map(|s| Version::from(s))?;
 
     let reduced = matches.is_present("reduced");
 
-    let x = match matches.value_of("X") {
-        Some(s) => s.parse::<i32>()?,
-        _ => handle_error_and_exit("X"),
-    };
+    let x = matches
+        .value_of("X")
+        .context("param X invalid")
+        .map(|s| s.parse::<i32>())??;
 
-    let y = match matches.value_of("Y") {
-        Some(s) => s.parse::<i32>()?,
-        _ => handle_error_and_exit("Y"),
-    };
+    let y = matches
+        .value_of("Y")
+        .context("param Y invalid")
+        .map(|s| s.parse::<i32>())??;
 
-    let refresh = match matches.value_of("refresh") {
-        Some(s) => s.parse::<i32>()?,
-        _ => handle_error_and_exit("refresh"),
-    };
+    let refresh = matches
+        .value_of("refresh")
+        .context("param refresh invalid")
+        .map(|s| s.parse::<i32>())??;
 
     let mode = CvtMode::new(x, y, refresh, reduced, false, false);
 
