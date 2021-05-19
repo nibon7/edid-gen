@@ -4,6 +4,7 @@ extern crate bitflags;
 pub mod cvtmode;
 pub use cvtmode::CvtMode;
 
+use anyhow::Context;
 use std::path::Path;
 use std::process::Command;
 use tempfile::tempdir;
@@ -34,15 +35,16 @@ impl Version {
     }
 }
 
-impl From<&str> for Version {
-    fn from(s: &str) -> Self {
+impl std::str::FromStr for Version {
+    type Err = anyhow::Error;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
-            "1.0" => Version::V1_0,
-            "1.1" => Version::V1_1,
-            "1.2" => Version::V1_2,
-            "1.3" => Version::V1_3,
-            "1.4" => Version::V1_4,
-            _ => unreachable!(),
+            "1.0" => Ok(Version::V1_0),
+            "1.1" => Ok(Version::V1_1),
+            "1.2" => Ok(Version::V1_2),
+            "1.3" => Ok(Version::V1_3),
+            "1.4" => Ok(Version::V1_4),
+            _ => None.context("EDID version inavlid.Valid versions range from 1.0 to 1.4"),
         }
     }
 }

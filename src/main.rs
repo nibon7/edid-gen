@@ -27,7 +27,6 @@ fn main() -> Result<()> {
                 .long("edid-version")
                 .short("v")
                 .takes_value(true)
-                .possible_values(&["1.0", "1.1", "1.2", "1.3", "1.4"])
                 .help("EDID version (v1.0 to v1.4)")
                 .default_value("1.4"),
         )
@@ -63,7 +62,7 @@ fn main() -> Result<()> {
     let version = matches
         .value_of("edid_version")
         .context("edid version invalid")
-        .map(|s| Version::from(s))?;
+        .map(|s| s.parse::<Version>())??;
 
     let reduced = matches.is_present("reduced");
 
