@@ -282,49 +282,42 @@ impl CvtMode {
     }
 
     pub fn generate_edid_asm(&self, version: Version, timing_name: &str) -> String {
-        let mut s = String::new();
-        let mut v = Vec::new();
+        let mut s = format!(
+            "#define VERSION {major}
+#define REVISION {minor}
+#define CLOCK {clock}
+#define XPIX {xpix}
+#define XBLANK {xblank}
+#define XOFFSET {xoffset}
+#define XPULSE {xpulse}
+#define YPIX {ypix}
+#define YBLANK {yblank}
+#define YOFFSET {yoffset}
+#define YPULSE {ypulse}
+#define VFREQ {vfreq}
+#define TIMING_NAME \"{timing_name}\"
+#define DPI 96
+#define HSYNC_POL 1
+#define VSYNC_POL 1\n",
+            major = version.major(),
+            minor = version.minor(),
+            clock = self.clock,
+            xpix = self.hdisplay,
+            xblank = self.htotal - self.hdisplay,
+            xoffset = self.hsync_start - self.hdisplay,
+            xpulse = self.hsync_end - self.hsync_start,
+            ypix = self.vdisplay,
+            yblank = self.vtotal - self.vdisplay,
+            yoffset = self.vsync_start - self.vdisplay,
+            ypulse = self.vsync_end - self.vsync_start,
+            vfreq = self.vrefresh,
+            timing_name = timing_name,
+        );
 
-        v.push(format!("#define VERSION {}", version.major()));
-        v.push(format!("#define REVISION {}", version.minor()));
-        v.push(format!("#define CLOCK {}", self.clock));
-
-        match self.xy_ratio {
-            XYRatio::RatioUnknown => (),
-            _ => v.push(format!("#define XY_RATIO {}", self.xy_ratio.to_string())),
-        }
-
-        v.push(format!("#define XPIX {}", self.hdisplay));
-        v.push(format!("#define XBLANK {}", self.htotal - self.hdisplay));
-        v.push(format!(
-            "#define XOFFSET {}",
-            self.hsync_start - self.hdisplay
-        ));
-        v.push(format!(
-            "#define XPULSE {}",
-            self.hsync_end - self.hsync_start
-        ));
-        v.push(format!("#define YPIX {}", self.vdisplay));
-        v.push(format!("#define YBLANK {}", self.vtotal - self.vdisplay));
-        v.push(format!(
-            "#define YOFFSET {}",
-            self.vsync_start - self.vdisplay
-        ));
-        v.push(format!(
-            "#define YPULSE {}",
-            self.vsync_end - self.vsync_start
-        ));
-
-        v.push(format!("#define VFREQ {}", self.vrefresh));
-        v.push(format!("#define TIMING_NAME \"{}\"", timing_name));
-
-        v.push("#define DPI 96".to_owned());
-        v.push(("#define HSYNC_POL 1").to_owned());
-        v.push(("#define VSYNC_POL 1").to_owned());
-
-        for it in v.iter() {
-            s.push_str(&it);
-            s.push('\n');
+        if let XYRatio::Ratio16_10 | XYRatio::Ratio16_9 | XYRatio::Ratio4_3 | XYRatio::Ratio5_4 =
+            self.xy_ratio
+        {
+            s.push_str(&format!("#define XY_RATIO {}\n", self.xy_ratio.to_string()));
         }
 
         s.push_str("#include \"edid.S.template\"");
