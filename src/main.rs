@@ -88,7 +88,5 @@ fn main() -> Result<()> {
         .reduced(reduced)
         .build();
 
-    edid_gen::generate_edid(&mode, version, timing_name, output)?;
-
-    Ok(())
+    edid_gen::generate_edid(&mode, version, timing_name, output)
 }

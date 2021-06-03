@@ -5,12 +5,14 @@ mod cvtmode;
 pub use cvtmode::{CvtMode, CvtModeBuilder};
 
 use anyhow::{anyhow, Context};
+use std::fs::OpenOptions;
 use std::io::{Read, Write};
 use std::io::{Seek, SeekFrom};
 use std::path::Path;
 use std::process::Command;
 use tempfile::Builder;
 
+/// EDID version enum (version 1.x)
 pub enum Version {
     V1_0,
     V1_1,
@@ -20,12 +22,14 @@ pub enum Version {
 }
 
 impl Version {
+    /// Major version
     pub fn major(&self) -> u8 {
         match *self {
             _ => 1,
         }
     }
 
+    /// Minor Version
     pub fn minor(&self) -> u8 {
         match *self {
             Self::V1_0 => 0,
@@ -63,6 +67,7 @@ fn calculate_crc(data: &[u8]) -> u8 {
     (0x100 - sum % 0x100) as u8
 }
 
+/// Generate binary EDID file
 pub fn generate_edid(
     mode: &CvtMode,
     version: Version,
@@ -84,7 +89,7 @@ pub fn generate_edid(
     std::fs::write(&edid_path, edid_asm.as_bytes())
         .with_context(|| format!("Failed to save {}", edid_path.display()))?;
 
-    Command::new("cc")
+    let status = Command::new("cc")
         .arg("-c")
         .arg(&edid_path)
         .arg("-o")
@@ -92,34 +97,54 @@ pub fn generate_edid(
         .status()
         .with_context(|| format!("Failed to compile {}", edid_path.display()))?;
 
-    Command::new("objcopy")
+    if !status.success() {
+        return Err(anyhow!(format!(
+            "Failed to compile {}",
+            edid_path.display()
+        )));
+    }
+
+    let status = Command::new("objcopy")
         .arg("-O")
         .arg("binary")
         .arg("-j")
         .arg(".data")
         .arg(output.as_ref())
         .status()
+        .with_context(|| format!("Failed to objcopy {}", output.as_ref().display()))?;
+
+    if !status.success() {
+        return Err(anyhow!(format!(
+            "Failed to objcopy {}",
+            output.as_ref().display()
+        )));
+    }
+
+    let mut output_file = OpenOptions::new()
+        .read(true)
+        .write(true)
+        .open(output.as_ref())
         .with_context(|| {
             format!(
-                "Failed to objcopy {}",
-                output.as_ref().to_path_buf().display()
+                "Failed to open {} with read/write mode",
+                output.as_ref().display()
             )
         })?;
 
-    let mut output_file = std::fs::OpenOptions::new()
-        .read(true)
-        .write(true)
-        .open(output.as_ref())?;
-
     let mut data: Vec<u8> = Vec::new();
-    output_file.read_to_end(&mut data)?;
+    output_file
+        .read_to_end(&mut data)
+        .with_context(|| format!("Failed to read {}", output.as_ref().display()))?;
 
     let crc = calculate_crc(&data);
 
-    output_file.seek(SeekFrom::End(-1))?;
+    output_file
+        .seek(SeekFrom::End(-1))
+        .with_context(|| format!("Failed to seek to the end of {}", output.as_ref().display()))?;
+
     output_file
         .write(&[crc])
-        .with_context(|| format!("Failed to save {}", output.as_ref().to_path_buf().display()))?;
+        .with_context(|| format!("Failed to save {}", output.as_ref().display()))?;
 
     Ok(())
 }

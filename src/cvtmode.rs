@@ -43,6 +43,7 @@ impl Default for XYRatio {
     }
 }
 
+/// Modeline based on the CVT algorithm
 #[derive(Debug, Default)]
 pub struct CvtMode {
     clock: u64,
@@ -60,6 +61,7 @@ pub struct CvtMode {
 }
 
 impl CvtMode {
+    /// Generate EDID definition string
     pub fn generate_edid_asm(&self, version: Version, timing_name: &str) -> String {
         let mut s = format!(
             "#define VERSION {major}
@@ -105,6 +107,7 @@ impl CvtMode {
     }
 }
 
+/// A builder to construct `CvtMode`
 #[derive(Debug, Default)]
 pub struct CvtModeBuilder {
     hdisplay: i32,
@@ -116,40 +119,48 @@ pub struct CvtModeBuilder {
 }
 
 impl CvtModeBuilder {
+    /// Construct a new `CvtModeBuilder`
     pub fn new() -> Self {
         Self::default()
     }
 
+    /// Horizontal resolution
     pub fn hdisplay(&mut self, hdisplay: i32) -> &mut Self {
         self.hdisplay = hdisplay;
         self
     }
 
+    /// Vertial resolution
     pub fn vdisplay(&mut self, vdisplay: i32) -> &mut Self {
         self.vdisplay = vdisplay;
         self
     }
 
+    /// Refresh rate
     pub fn vrefresh(&mut self, vrefresh: i32) -> &mut Self {
         self.vrefresh = vrefresh;
         self
     }
 
+    /// Whether to use reduced blanking
     pub fn reduced(&mut self, reduced: bool) -> &mut Self {
         self.reduced = reduced;
         self
     }
 
+    /// Whether to compute an interlaced mode
     pub fn interlaced(&mut self, interlaced: bool) -> &mut Self {
         self.interlaced = interlaced;
         self
     }
 
+    /// Whether to add margins (borders)
     pub fn margins(&mut self, margins: bool) -> &mut Self {
         self.margins = margins;
         self
     }
 
+    /// Build a `CvtMode`
     pub fn build(&self) -> CvtMode {
         let mut mode = CvtMode::default();
 
