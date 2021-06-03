@@ -2,7 +2,7 @@
 extern crate bitflags;
 
 mod cvtmode;
-pub use cvtmode::CvtMode;
+pub use cvtmode::{CvtMode, CvtModeBuilder};
 
 use anyhow::{anyhow, Context};
 use std::io::{Read, Write};

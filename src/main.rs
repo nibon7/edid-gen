@@ -1,6 +1,6 @@
 use anyhow::{Context, Result};
 use clap::{App, Arg};
-use edid_gen::{CvtMode, Version};
+use edid_gen::{CvtModeBuilder, Version};
 
 fn main() -> Result<()> {
     let matches = App::new("edid-gen")
@@ -81,7 +81,12 @@ fn main() -> Result<()> {
         .context("param refresh invalid")
         .map(|s| s.parse::<i32>())??;
 
-    let mode = CvtMode::new(x, y, refresh, reduced, false, false);
+    let mode = CvtModeBuilder::new()
+        .hdisplay(x)
+        .vdisplay(y)
+        .vrefresh(refresh)
+        .reduced(reduced)
+        .build();
 
     edid_gen::generate_edid(&mode, version, timing_name, output)?;
 

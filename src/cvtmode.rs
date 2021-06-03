@@ -60,17 +60,100 @@ pub struct CvtMode {
 }
 
 impl CvtMode {
-    // stolen from linux/drivers/gpu/drm/drm_modes.c
-    pub fn new(
-        hdisplay: i32,
-        vdisplay: i32,
-        _vrefresh: i32,
-        reduced: bool,
-        interlaced: bool,
-        margins: bool,
-    ) -> Self {
+    pub fn generate_edid_asm(&self, version: Version, timing_name: &str) -> String {
+        let mut s = format!(
+            "#define VERSION {major}
+#define REVISION {minor}
+#define CLOCK {clock}
+#define XPIX {xpix}
+#define XBLANK {xblank}
+#define XOFFSET {xoffset}
+#define XPULSE {xpulse}
+#define YPIX {ypix}
+#define YBLANK {yblank}
+#define YOFFSET {yoffset}
+#define YPULSE {ypulse}
+#define VFREQ {vfreq}
+#define TIMING_NAME \"{timing_name}\"
+#define DPI 96
+#define HSYNC_POL 1
+#define VSYNC_POL 1\n",
+            major = version.major(),
+            minor = version.minor(),
+            clock = self.clock,
+            xpix = self.hdisplay,
+            xblank = self.htotal - self.hdisplay,
+            xoffset = self.hsync_start - self.hdisplay,
+            xpulse = self.hsync_end - self.hsync_start,
+            ypix = self.vdisplay,
+            yblank = self.vtotal - self.vdisplay,
+            yoffset = self.vsync_start - self.vdisplay,
+            ypulse = self.vsync_end - self.vsync_start,
+            vfreq = self.vrefresh,
+            timing_name = timing_name,
+        );
+
+        if let XYRatio::Ratio16_10 | XYRatio::Ratio16_9 | XYRatio::Ratio4_3 | XYRatio::Ratio5_4 =
+            self.xy_ratio
+        {
+            s.push_str(&format!("#define XY_RATIO {}\n", self.xy_ratio.to_string()));
+        }
+
+        s.push_str("#include \"edid.S.template\"");
+
+        s
+    }
+}
+
+#[derive(Debug, Default)]
+pub struct CvtModeBuilder {
+    hdisplay: i32,
+    vdisplay: i32,
+    vrefresh: i32,
+    reduced: bool,
+    interlaced: bool,
+    margins: bool,
+}
+
+impl CvtModeBuilder {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn hdisplay(&mut self, hdisplay: i32) -> &mut Self {
+        self.hdisplay = hdisplay;
+        self
+    }
+
+    pub fn vdisplay(&mut self, vdisplay: i32) -> &mut Self {
+        self.vdisplay = vdisplay;
+        self
+    }
+
+    pub fn vrefresh(&mut self, vrefresh: i32) -> &mut Self {
+        self.vrefresh = vrefresh;
+        self
+    }
+
+    pub fn reduced(&mut self, reduced: bool) -> &mut Self {
+        self.reduced = reduced;
+        self
+    }
+
+    pub fn interlaced(&mut self, interlaced: bool) -> &mut Self {
+        self.interlaced = interlaced;
+        self
+    }
+
+    pub fn margins(&mut self, margins: bool) -> &mut Self {
+        self.margins = margins;
+        self
+    }
+
+    pub fn build(&self) -> CvtMode {
         let mut mode = CvtMode::default();
 
+        // stolen from linux/drivers/gpu/drm/drm_modes.c
         const HV_FACTOR: i32 = 1000;
         /* 1) top/bottom margin size (% of height) - default: 1.8, */
         const CVT_MARGIN_PERCENTAGE: i32 = 18;
@@ -95,23 +178,23 @@ impl CvtMode {
         let tmp2: i32;
 
         /* the CVT default refresh rate is 60Hz */
-        let vrefresh = match _vrefresh {
+        mode.vrefresh = match self.vrefresh {
             x if x <= 0 => 60,
-            _ => _vrefresh,
+            _ => self.vrefresh,
         };
 
         /* the required field fresh rate */
-        if interlaced {
-            vfieldrate = vrefresh as u32 * 2;
+        if self.interlaced {
+            vfieldrate = self.vrefresh as u32 * 2;
         } else {
-            vfieldrate = vrefresh as u32;
+            vfieldrate = self.vrefresh as u32;
         }
 
         /* horizontal pixels */
-        hdisplay_rnd = hdisplay - (hdisplay % CVT_H_GRANULARITY);
+        hdisplay_rnd = self.hdisplay - (self.hdisplay % CVT_H_GRANULARITY);
 
         /* determine the left&right borders */
-        if margins {
+        if self.margins {
             hmargin = hdisplay_rnd * CVT_MARGIN_PERCENTAGE / 1000;
             hmargin -= hmargin % CVT_H_GRANULARITY;
         } else {
@@ -122,42 +205,42 @@ impl CvtMode {
         mode.hdisplay = hdisplay_rnd + 2 * hmargin;
 
         /* find the number of lines per field */
-        if interlaced {
-            vdisplay_rnd = vdisplay / 2;
+        if self.interlaced {
+            vdisplay_rnd = self.vdisplay / 2;
         } else {
-            vdisplay_rnd = vdisplay;
+            vdisplay_rnd = self.vdisplay;
         }
 
         /* find the top & bottom borders */
-        if margins {
+        if self.margins {
             vmargin = vdisplay_rnd * CVT_MARGIN_PERCENTAGE / 1000;
         } else {
             vmargin = 0;
         }
 
-        mode.vdisplay = vdisplay + 2 * vmargin;
+        mode.vdisplay = self.vdisplay + 2 * vmargin;
 
         /* Interlaced */
-        if interlaced {
+        if self.interlaced {
             interlace = 1;
         } else {
             interlace = 0;
         }
 
         /* Determine VSync Width from aspect ratio */
-        if ((vdisplay % 3) == 0) && ((vdisplay * 4 / 3) == hdisplay) {
+        if ((self.vdisplay % 3) == 0) && ((self.vdisplay * 4 / 3) == self.hdisplay) {
             mode.xy_ratio = XYRatio::Ratio4_3;
             vsync = 4;
-        } else if ((vdisplay % 9) == 0) && ((vdisplay * 16 / 9) == hdisplay) {
+        } else if ((self.vdisplay % 9) == 0) && ((self.vdisplay * 16 / 9) == self.hdisplay) {
             mode.xy_ratio = XYRatio::Ratio16_9;
             vsync = 5;
-        } else if ((vdisplay % 10) == 0) && ((vdisplay * 16 / 10) == hdisplay) {
+        } else if ((self.vdisplay % 10) == 0) && ((self.vdisplay * 16 / 10) == self.hdisplay) {
             mode.xy_ratio = XYRatio::Ratio16_10;
             vsync = 6;
-        } else if ((vdisplay % 4) == 0) && ((vdisplay * 5 / 4) == hdisplay) {
+        } else if ((self.vdisplay % 4) == 0) && ((self.vdisplay * 5 / 4) == self.hdisplay) {
             mode.xy_ratio = XYRatio::Ratio5_4;
             vsync = 7;
-        } else if ((vdisplay % 9) == 0) && ((vdisplay * 15 / 9) == hdisplay) {
+        } else if ((self.vdisplay % 9) == 0) && ((self.vdisplay * 15 / 9) == self.hdisplay) {
             mode.xy_ratio = XYRatio::RatioUnknown;
             vsync = 7;
         } else {
@@ -166,7 +249,7 @@ impl CvtMode {
             vsync = 10;
         }
 
-        if !reduced {
+        if !self.reduced {
             /* simplify the GTF calculation */
             /* 4) Minimum time of vertical sync + back porch interval (µs)
              * default 550.0
@@ -265,63 +348,17 @@ impl CvtMode {
 
         /* 18/16. Find actual vertical frame frequency */
         /* ignore - just set the mode flag for interlaced */
-        if interlaced {
+        if self.interlaced {
             mode.vtotal *= 2;
             mode.flags |= CvtModeFlags::INTERLACE;
         }
         /* Fill the mode line name */
-        if reduced {
+        if self.reduced {
             mode.flags |= CvtModeFlags::PHSYNC | CvtModeFlags::NVSYNC;
         } else {
             mode.flags |= CvtModeFlags::PVSYNC | CvtModeFlags::NHSYNC;
         }
 
-        mode.vrefresh = vrefresh;
-
         mode
-    }
-
-    pub fn generate_edid_asm(&self, version: Version, timing_name: &str) -> String {
-        let mut s = format!(
-            "#define VERSION {major}
-#define REVISION {minor}
-#define CLOCK {clock}
-#define XPIX {xpix}
-#define XBLANK {xblank}
-#define XOFFSET {xoffset}
-#define XPULSE {xpulse}
-#define YPIX {ypix}
-#define YBLANK {yblank}
-#define YOFFSET {yoffset}
-#define YPULSE {ypulse}
-#define VFREQ {vfreq}
-#define TIMING_NAME \"{timing_name}\"
-#define DPI 96
-#define HSYNC_POL 1
-#define VSYNC_POL 1\n",
-            major = version.major(),
-            minor = version.minor(),
-            clock = self.clock,
-            xpix = self.hdisplay,
-            xblank = self.htotal - self.hdisplay,
-            xoffset = self.hsync_start - self.hdisplay,
-            xpulse = self.hsync_end - self.hsync_start,
-            ypix = self.vdisplay,
-            yblank = self.vtotal - self.vdisplay,
-            yoffset = self.vsync_start - self.vdisplay,
-            ypulse = self.vsync_end - self.vsync_start,
-            vfreq = self.vrefresh,
-            timing_name = timing_name,
-        );
-
-        if let XYRatio::Ratio16_10 | XYRatio::Ratio16_9 | XYRatio::Ratio4_3 | XYRatio::Ratio5_4 =
-            self.xy_ratio
-        {
-            s.push_str(&format!("#define XY_RATIO {}\n", self.xy_ratio.to_string()));
-        }
-
-        s.push_str("#include \"edid.S.template\"");
-
-        s
     }
 }
