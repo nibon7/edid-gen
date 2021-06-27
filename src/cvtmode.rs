@@ -25,14 +25,14 @@ enum XYRatio {
     RatioUnknown,
 }
 
-impl ToString for XYRatio {
-    fn to_string(&self) -> String {
+impl std::fmt::Display for XYRatio {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match *self {
-            Self::Ratio16_10 => "XY_RATIO_16_10".to_owned(),
-            Self::Ratio4_3 => "XY_RATIO_4_3".to_owned(),
-            Self::Ratio5_4 => "XY_RATIO_5_4".to_owned(),
-            Self::Ratio16_9 => "XY_RATIO_16_9".to_owned(),
-            Self::RatioUnknown => "RATION UNKNOWN".to_owned(),
+            Self::Ratio16_10 => write!(f, "XY_RATIO_16_10"),
+            Self::Ratio4_3 => write!(f, "XY_RATIO_4_3"),
+            Self::Ratio5_4 => write!(f, "XY_RATIO_5_4"),
+            Self::Ratio16_9 => write!(f, "XY_RATIO_16_9"),
+            Self::RatioUnknown => write!(f, "RATION UNKNOWN"),
         }
     }
 }
@@ -98,7 +98,7 @@ impl CvtMode {
         if let XYRatio::Ratio16_10 | XYRatio::Ratio16_9 | XYRatio::Ratio4_3 | XYRatio::Ratio5_4 =
             self.xy_ratio
         {
-            s.push_str(&format!("#define XY_RATIO {}\n", self.xy_ratio.to_string()));
+            s.push_str(&format!("#define XY_RATIO {}\n", self.xy_ratio));
         }
 
         s.push_str("#include \"edid.S.template\"");
