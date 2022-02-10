@@ -5,11 +5,12 @@ mod cvtmode;
 pub use cvtmode::{CvtMode, CvtModeBuilder};
 
 use anyhow::{anyhow, Context};
-use std::fs::OpenOptions;
-use std::io::{Read, Write};
-use std::io::{Seek, SeekFrom};
-use std::path::Path;
-use std::process::Command;
+use std::{
+    fs::OpenOptions,
+    io::{Read, Seek, SeekFrom, Write},
+    path::Path,
+    process::Command,
+};
 use tempfile::Builder;
 
 /// EDID version enum (version 1.x)
@@ -24,9 +25,7 @@ pub enum Version {
 impl Version {
     /// Major version
     pub fn major(&self) -> u8 {
-        match *self {
-            _ => 1,
-        }
+        1
     }
 
     /// Minor Version

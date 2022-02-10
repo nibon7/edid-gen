@@ -95,9 +95,10 @@ impl CvtMode {
             timing_name = timing_name,
         );
 
-        if let XYRatio::Ratio16_10 | XYRatio::Ratio16_9 | XYRatio::Ratio4_3 | XYRatio::Ratio5_4 =
-            self.xy_ratio
-        {
+        if matches!(
+            self.xy_ratio,
+            XYRatio::Ratio16_10 | XYRatio::Ratio16_9 | XYRatio::Ratio4_3 | XYRatio::Ratio5_4
+        ) {
             s.push_str(&format!("#define XY_RATIO {}\n", self.xy_ratio));
         }
 
